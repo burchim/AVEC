@@ -565,7 +565,7 @@ class LRS(Dataset):
 
         if self.version == "LRS2":
             paths_txt = glob.glob(os.path.join(self.root, "LRS2", "*", "*", "*", "*.txt"))
-        elif self.version == "LRS2":
+        elif self.version == "LRS3":
             paths_txt = glob.glob(os.path.join(self.root, "LRS3", "*", "*", "*.txt"))
 
         # Create Corpus File
