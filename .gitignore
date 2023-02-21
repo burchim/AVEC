@@ -7,3 +7,6 @@ datasets/*
 callbacks/*
 .ipynb_checkpoints
 .cache
+ctcdecode/
+face_alignment/
+face_detection/

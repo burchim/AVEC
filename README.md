@@ -59,9 +59,19 @@ pip install -e .
 cd ..
 ```
 
-## Datasets
+Download pretrained model checkpoints and tokenizers.
+```
+python download_checkpoints_and_tokenizers.py
+```
+
+## Download And Prepare Datasets
 
 We used 3 publicly available datasets in this work. The [Lip Reading in the Wild (LRW)](https://www.robots.ox.ac.uk/~vgg/data/lip_reading/lrw1.html) dataset was used for visual pre-training and the [Lip Reading Sentences 2 (LRS2)](https://www.robots.ox.ac.uk/~vgg/data/lip_reading/lrs2.html) and [Lip Reading Sentences 3 (LRS3)](https://www.robots.ox.ac.uk/~vgg/data/lip_reading/lrs3.html) datasets were used for training and evaluation. LRW is an audio-visual word recognition dataset consisting of short video segments containing a single word out of a vocabulary of 500. LRS2 and LRS3 are audio-visual speech recognition datasets composed of 224.1 hours from the BBC television and 438.9 hours from TED and TEDx talks.
+
+```
+# You will need to add your datasets username/password before running script
+python download_and_prepare_datasets.py
+```
 
 ## Running an experiment
 
@@ -130,6 +140,11 @@ python main.py --config_file configs/config_file.py --checkpoint checkpoint.ckpt
 
 
 ## Models
+
+Evaluate Models:
+```
+./eval_models.sh
+```
 
 | LRS Model        		  | Params (M) | Training Datasets | LRS2 test WER (%)| LRS3 test WER (%) | GPUs |
 | :-------------------:	|:----------:|:------:|:------:|:------:|:------:|

@@ -4,7 +4,7 @@ torchaudio
 torchtext
 matplotlib
 tensorboard
-jiwer
+jiwer==2.4.0
 numpy
 tqdm
 sentencepiece

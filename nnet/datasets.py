@@ -28,6 +28,7 @@ import numpy as np
 import requests
 import pickle
 import gdown
+import multiprocessing
 
 # NeuralNets
 from nnet import layers
@@ -118,7 +119,7 @@ class LRS(Dataset):
     
     """
 
-    def __init__(self, batch_size, collate_fn, version="LRS2", img_mean=(0.5,), img_std=(0.5,), crop_mouth=True, root="datasets", shuffle=True, ascending=False, mode="pretrain+train+val", load_audio=True, load_video=True, video_transform=None, audio_transform=None, download=False, prepare=False, workers_prepare=0, video_max_length=None, audio_max_length=None, label_max_length=None, tokenizer_path="datasets/LRS2/tokenizer.model", mean_face_path="datasets/LRS2/20words_mean_face.npy", align=False):
+    def __init__(self, batch_size, collate_fn, version="LRS2", img_mean=(0.5,), img_std=(0.5,), crop_mouth=True, root="datasets", shuffle=True, ascending=False, mode="pretrain+train+val", load_audio=True, load_video=True, video_transform=None, audio_transform=None, download=False, prepare=False, workers_prepare=-1, video_max_length=None, audio_max_length=None, label_max_length=None, tokenizer_path="datasets/LRS3/tokenizerbpe256.model", mean_face_path="media/20words_mean_face.npy", align=False):
         super(LRS, self).__init__(batch_size=batch_size, collate_fn=collate_fn, root=root, shuffle=shuffle and not ascending)
 
         assert version in ["LRS2", "LRS3"]
@@ -132,7 +133,7 @@ class LRS(Dataset):
         self.video_max_length = video_max_length
         self.audio_max_length = audio_max_length
         self.label_max_length = label_max_length
-        self.workers_prepare = workers_prepare
+        self.workers_prepare = multiprocessing.cpu_count() if workers_prepare==-1 else workers_prepare
         self.tokenizer_path = tokenizer_path
         self.crop_mouth = crop_mouth
         self.mean_face_path = mean_face_path
@@ -223,7 +224,7 @@ class LRS(Dataset):
         
         if not os.path.isfile(corpus_path):
 
-            print("Create Corpus File:", mode)
+            print("Create Corpus File: {} {}".format(self.version, mode))
             corpus_file = open(corpus_path, "w")
 
             # LRS2
@@ -486,7 +487,7 @@ class LRS(Dataset):
 
         # Print
         print("Download Dataset")
-        os.makedirs(os.path.join(self.root, self.version))
+        os.makedirs(os.path.join(self.root, self.version), exist_ok=True)
 
         # LRS2
         if self.version == "LRS2":
@@ -499,9 +500,10 @@ class LRS(Dataset):
     def download_file(self, url, path):
 
         # Download, Open and Write
-        response = requests.get(url, auth=(os.getenv("{}_USERNAME".format(self.version)), os.getenv("{}_PASSWORD".format(self.version))), stream=True)
-        with open(path, "wb") as f:
-            f.write(response.content)
+        with requests.get(url, auth=(os.getenv("{}_USERNAME".format(self.version)), os.getenv("{}_PASSWORD".format(self.version))), stream=True) as r:
+            with open(path, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=1024):
+                    f.write(chunk)
 
     class PrepareDataset:
 
@@ -549,7 +551,7 @@ class LRS(Dataset):
                 video = torch.tensor(video)
          
             # Save Video
-            torchvision.io.write_video(filename=file_path.replace(".txt", "_mouth.mp4"), video_array=video, fps=info["video_fps"], audio_array=audio, audio_fps=info["audio_fps"], video_codec="libx264", audio_codec="aac")
+            torchvision.io.write_video(filename=file_path.replace(".txt", "_mouth.mp4"), video_array=video, fps=info["video_fps"], video_codec="libx264")
 
             # Save Infos
             infos = {"label": label, "video_len": video.shape[0], "audio_len": audio.shape[1], "label_len": label.shape[0]}
@@ -599,7 +601,7 @@ class LRS(Dataset):
 
 class CorpusLM(Dataset):
 
-    def __init__(self, batch_size, collate_fn, root="datasets", shuffle=True, download=False, tokenizer_path="datasets/LibriSpeechCorpus/tokenizer.model", max_length=None, corpus_path="datasets/LibriSpeechCorpus/librispeech-lm-norm.txt"):
+    def __init__(self, batch_size, collate_fn, root="datasets", shuffle=True, download=False, tokenizer_path="datasets/LRS3/tokenizerbpe1024.model", max_length=None, corpus_path="datasets/LibriSpeechCorpus/librispeech-lm-norm.txt"):
         super(CorpusLM, self).__init__(batch_size=batch_size, collate_fn=collate_fn, root=root, shuffle=shuffle)
 
         # Params
@@ -641,13 +643,15 @@ class LRW(Dataset):
     
     """
 
-    def __init__(self, batch_size, collate_fn, root="datasets", shuffle=True, mode="train", img_mean=(0.5,), img_std=(0.5,), crop_mouth=True, video_transform=None, download=False, prepare=False, mean_face_path="datasets/LRW/20words_mean_face.npy", workers_prepare=0):
+    def __init__(self, batch_size, collate_fn, root="datasets", shuffle=True, mode="train", img_mean=(0.5,), img_std=(0.5,), crop_mouth=True, load_audio=True, load_video=True, video_transform=None, download=False, prepare=False, mean_face_path="media/20words_mean_face.npy", workers_prepare=-1):
         super(LRW, self).__init__(batch_size=batch_size, collate_fn=collate_fn, root=root, shuffle=shuffle)
 
         # Params
-        self.workers_prepare = workers_prepare
+        self.workers_prepare = multiprocessing.cpu_count() if workers_prepare==-1 else workers_prepare
         self.crop_mouth = crop_mouth
         self.mean_face_path = mean_face_path
+        self.load_audio = load_audio
+        self.load_video = load_video
 
         # Download Dataset
         if download:
@@ -668,10 +672,9 @@ class LRW(Dataset):
             self.class_dict[c] = i
 
         # Paths
-        if self.crop_mouth:
-            self.paths = glob.glob(os.path.join(self.root, "LRW", "lipread_mp4", "*", mode, "*mouth.mp4"))
-        else:
-            self.paths = glob.glob(os.path.join(self.root, "LRW", "lipread_mp4", "*", mode, "*[0-9].mp4"))
+        self.paths = glob.glob(os.path.join(self.root, "LRW", "lipread_mp4", "*", mode, "*[0-9].mp4"))
+        for i, path in enumerate(self.paths):
+                self.paths[i] = path[:-4]
 
         # Video Transforms
         self.video_preprocessing = torchvision.transforms.Compose([
@@ -690,7 +693,19 @@ class LRW(Dataset):
     def __getitem__(self, n):
 
         # Load Video
-        video, audio, infos = torchvision.io.read_video(self.paths[n])
+        if self.load_video:
+            if self.crop_mouth:
+                video, audio, infos = torchvision.io.read_video(self.paths[n] + "_mouth.mp4")
+            else:
+                video, audio, infos = torchvision.io.read_video(self.paths[n] + ".mp4")
+        else:
+            video = None
+
+        # Load Audio
+        if self.load_audio:
+            audio = torchaudio.load(self.paths[n] + ".flac")[0]
+        else:
+            audio = None
 
         # Label
         c = self.paths[n].split("/")[-1].split("_")[0]
@@ -745,7 +760,7 @@ class LRW(Dataset):
                 video = torch.tensor(video)
          
             # Save Video
-            torchvision.io.write_video(filename=file_path.replace(".txt", "_mouth.mp4"), video_array=video, fps=info["video_fps"], audio_array=audio, audio_fps=info["audio_fps"], video_codec="libx264", audio_codec="aac")
+            torchvision.io.write_video(filename=file_path.replace(".txt", "_mouth.mp4"), video_array=video, fps=info["video_fps"], video_codec="libx264")
             
             return file_path
 
@@ -769,7 +784,7 @@ class LRW(Dataset):
 
         # Print
         print("Download dataset")
-        os.makedirs(os.path.join(self.root, "LRW"))
+        os.makedirs(os.path.join(self.root, "LRW"), exist_ok=True)
 
         # Download Pretrain
         self.download_file(
@@ -816,6 +831,7 @@ class LRW(Dataset):
     def download_file(self, url, path):
 
         # Download, Open and Write
-        response = requests.get(url, auth=(os.getenv("LRW_USERNAME"), os.getenv("LRW_PASSWORD")), stream=True)
-        with open(path, "wb") as f:
-            f.write(response.content)
+        with requests.get(url, auth=(os.getenv("LRW_USERNAME"), os.getenv("LRW_PASSWORD")), stream=True) as r:
+            with open(path, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=1024):
+                    f.write(chunk)
